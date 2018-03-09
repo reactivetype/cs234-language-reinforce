@@ -14,5 +14,10 @@
 python train_spr_planning.py
 ```
 
+### Acknowledgements
+
+https://github.com/JannerM/spatial-reasoning
+https://github.com/kentsommer/pytorch-value-iteration-networks
+
 
 
