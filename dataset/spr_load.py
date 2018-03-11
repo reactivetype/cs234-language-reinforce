@@ -30,6 +30,26 @@ def load_vin(datadir, mode, data, num_train, num_test, scale=50, train=True, loa
     # print len(vin_data)
     return vin_data, values, text_vocab
 
+def load_vin_instructions(datadir, mode, data, num_train, num_test, scale=50, train=True):
+    if train:
+        data, tmp_data = load(mode, data, num_train, num_test, datadir)
+    else:
+        tmp_data, data = load(mode, data, num_train, num_test, datadir)
+
+    layouts, objects, rewards, terminal, instructions, values, goals = data
+    layout_vocab_size, object_vocab_size, text_vocab_size, text_vocab = get_statistics(data, tmp_data)
+    s1, s2, label = get_vin_data(values, goals, scale)
+    indices = instructions_to_indices(instructions, text_vocab)
+    layouts = np.repeat(layouts, scale, axis=0)
+    objects = np.repeat(objects, scale, axis=0)
+    indices = np.repeat(indices, scale, axis=0)
+    # if load_instructions:
+    #     vin_data = vin_format_instructions(layouts, objects, instructions, s1, s2, label)
+    # else:
+    #     vin_data = vin_format_terminal(layouts, objects, 10*terminal, s1, s2, label)
+    # print len(vin_data)
+    return layouts, objects, indices, s1, s2, label, values, text_vocab, object_vocab_size
+
 def vin_format_terminal(layouts, objects, terminal, s1, s2, label, scale=1):
     data = []
     input_map = np.concatenate((layouts, objects, terminal), axis=1)

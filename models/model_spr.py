@@ -1,19 +1,22 @@
 import numpy as np
-from spr_models import text_model, attention_model
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
 from torch.nn.parameter import Parameter
-from text_model import TextModel
 
-class SprVin(nn.Module):
-  
-    def __init__(self, config):
-        super(VIN, self).__init__()
+#Models
+from lookup_model import LookupModel
+from text_model import TextModel
+from attention_heatmap import AttentionHeatmap
+
+class SprVin(nn.Module): 
+    def __init__(self, config, heatmap_model, object_model):
+        super(SprVin, self).__init__()
         self.config = config
-        self.text_net = TextModel(self.config.vocab_size, ninp, nhid, nlayers, out_dim)
+        self.heatmap_model = heatmap_model
+        self.object_model = object_model
         self.h = nn.Conv2d(in_channels=config.l_i, 
                            out_channels=config.l_h, 
                            kernel_size=(3, 3), 
@@ -36,8 +39,12 @@ class SprVin(nn.Module):
         self.sm = nn.Softmax()
 
 
-    def forward(self, X, S1, S2, config, I):
+    def forward(self, layout, obj_map, inst, S1, S2, config):
+        obj_embed = self.object_model.forward(obj_map)
+        heatmap = self.heatmap_model((obj_embed, inst))
+        X = torch.cat([layout, heatmap], dim=1)
         h = self.h(X)
+
         r = self.r(h)
         q = self.q(r)
         v, _ = torch.max(q, dim=1, keepdim=True)
@@ -63,3 +70,24 @@ class SprVin(nn.Module):
 
         logits = self.fc(q_out)
         return logits, self.sm(logits)
+
+if __name__ == '__main__':
+    #create object embedding model
+    objects = 10
+    obj_embed = 7
+    object_model = LookupModel(objects, embed_dim=obj_embed)
+
+    #text lstm model
+    attn_kernel = 3
+    attn_in = obj_embed
+    attn_out = 1 # no. of heatmap channels
+    lstm_out = (attn_kernel**2) * attn_in * attn_out
+    vocab_size = 300
+    instruction_model = TextModel(vocab_size, ninp=15,
+                                nhid=30, nlayers=1,
+                                out_dim=lstm_out)
+    heatmap_model = AttentionHeatmap(instruction_model,
+                                    attn_kernel,
+                                    attn_in,
+                                    attn_out)
+
