@@ -149,7 +149,7 @@ if __name__ == '__main__':
     # Get path to save trained model
     if not os.path.isdir(config.save_dir):
         os.mkdir(config.save_dir)
-    save_name = "vanilla_vin_spr_{0}x{0}.pth".format(config.imsize)
+    save_name = "spr_vin{0}x{0}.pth".format(config.imsize)
     save_path = os.path.join(config.save_dir, save_name)
 
     #Load Spatial reasoning dataset
