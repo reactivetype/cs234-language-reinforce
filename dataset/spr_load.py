@@ -2,6 +2,7 @@ import sys, os, math, pickle, numpy as np, torch, pdb
 from tqdm import tqdm
 import environment.library as library
 from IPython import embed
+np.random.seed(0)
 
 HUMAN_TEST_MAPS = {
     'local': [18,20,21,22,23,24,25,26,27,49,53,20,30,40,50,35,45,46,47],
@@ -43,12 +44,13 @@ def load_vin_instructions(datadir, mode, data, num_train, num_test, scale=50, tr
     layouts = np.repeat(layouts, scale, axis=0)
     objects = np.repeat(objects, scale, axis=0)
     indices = np.repeat(indices, scale, axis=0)
+    goals = np.repeat(goals, scale, axis=0)
     # if load_instructions:
     #     vin_data = vin_format_instructions(layouts, objects, instructions, s1, s2, label)
     # else:
     #     vin_data = vin_format_terminal(layouts, objects, 10*terminal, s1, s2, label)
     # print len(vin_data)
-    return layouts, objects, indices, s1, s2, label, values, text_vocab, object_vocab_size
+    return layouts, objects, indices, s1, s2, goals, label, values, text_vocab, object_vocab_size
 
 def vin_format_terminal(layouts, objects, terminal, s1, s2, label, scale=1):
     data = []
@@ -115,7 +117,7 @@ def reorder(v):
     1   6
     2 4 7
     """
-    return[v[6], v[7], v[4], v[2], v[1], v[0], v[3], v[5]]
+    return [v[6], v[7], v[4], v[2], v[1], v[0], v[3], v[5]]
 
 def overflow_check(i, j, grid_size=10):
     if i < 0 or j < 0:

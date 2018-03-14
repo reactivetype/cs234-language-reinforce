@@ -21,7 +21,7 @@ from models.model_spr import SprVin
 from models.lookup_model import LookupModel
 from models.text_model import TextModel
 from models.attention_heatmap import AttentionHeatmap
-
+from test_spr import test_manhattan
 
 def train(net, trainloader, config, criterion, optimizer, use_GPU):
     print_header()
@@ -30,7 +30,7 @@ def train(net, trainloader, config, criterion, optimizer, use_GPU):
         start_time = time.time()
         for i, data in enumerate(trainloader): # Loop over batches of data
             # Get input batch
-            layouts, object_maps, inst, S1, S2, labels = data
+            layouts, object_maps, inst, S1, S2, goals, labels = data
 
             if layouts.size()[0] != config.batch_size:
                 continue # Drop those data, if not enough for a batch
@@ -69,7 +69,7 @@ def train(net, trainloader, config, criterion, optimizer, use_GPU):
 def test(net, testloader, config):  
     total, correct = 0.0, 0.0
     for i, data in enumerate(testloader):
-        layouts, object_maps, inst, S1, S2, labels = data
+        layouts, object_maps, inst, S1, S2, goals, labels = data
         if layouts.size()[0] != config.batch_size:
             continue # Drop those data, if not enough for a batch
         # Send Tensors to GPU if available
@@ -83,6 +83,7 @@ def test(net, testloader, config):
         # Wrap to autograd.Variable
         layouts, object_maps = Variable(layouts), Variable(object_maps)
         S1, S2 = Variable(S1), Variable(S2)
+        inst = Variable(inst)
         # Forward pass
         outputs, predictions = net(layouts, object_maps, inst, S1, S2, config)
         # Select actions with max scores(logits)
@@ -117,7 +118,7 @@ if __name__ == '__main__':
                         help='Learning rate, [0.01, 0.005, 0.002, 0.001]')
     parser.add_argument('--epochs', 
                         type=int, 
-                        default=30, 
+                        default=25, 
                         help='Number of epochs to train')
     parser.add_argument('--k', 
                         type=int, 
@@ -143,22 +144,35 @@ if __name__ == '__main__':
                         type=str, 
                         default='trained_models/', 
                         help='Directory to save models')
+    parser.add_argument('--data_scale', 
+                        type=int, 
+                        default=25, 
+                        help='Data point replication')
 
-
+    parser.add_argument('--name_header', 
+                        type=str, 
+                        default="spr_vin", 
+                        help='Data point replication')
     config = parser.parse_args()
     # Get path to save trained model
+
     if not os.path.isdir(config.save_dir):
         os.mkdir(config.save_dir)
-    save_name = "spr_vin{0}x{0}.pth".format(config.imsize)
+    save_name = "{}_{}epcs_{}its_{}datascale.pth".format(config.name_header, config.epochs,
+                                                         config.k, config.data_scale)
     save_path = os.path.join(config.save_dir, save_name)
+    print "Model will be saved as {}".format(save_path)
 
     #Load Spatial reasoning dataset
-    trainset = SprInstructions(config.datadir, mode='local', annotation='human', train=True)
-    testset = SprInstructions(config.datadir, mode='local', annotation='human', train=False)
+    trainset = SprInstructions(config.datadir, mode='local',
+                               annotation='human', train=True,
+                               scale=config.data_scale)
+    testset = SprInstructions(config.datadir, mode='local',
+                              annotation='human', train=False, scale=1)
     
     # Create Dataloader
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=config.batch_size, shuffle=True, num_workers=0)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=config.batch_size, shuffle=False, num_workers=0)
+    testloader = torch.utils.data.DataLoader(testset, batch_size=1, shuffle=False, num_workers=0)
 
     #create the model
     objects = trainset.object_vocab_size
@@ -198,6 +212,8 @@ if __name__ == '__main__':
     # Train the model
     train(spr_model, trainloader, config, criterion, optimizer, use_GPU)
     # Test accuracy
-    test(spr_model, testloader, config)
+    # test(spr_model, testloader, config)
+    report_path = save_path.replace('.pth', '.txt')
+    test_manhattan(spr_model, testloader, config, report_path)
     # Save the trained model
     torch.save(spr_model, save_path)

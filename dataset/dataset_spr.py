@@ -67,6 +67,7 @@ class SprInstructions(data.Dataset):
         self.mode = mode
         self.annotation = annotation
         self.datadir = datadir
+        self.scale = scale
         self.load_data()
         self.text_vocab_size   = len(self.text_vocab) + 1
         data_type = 'train' if self.train else 'test'
@@ -74,9 +75,10 @@ class SprInstructions(data.Dataset):
 
     def load_data(self):
         self.layouts, self.objects, self.instructions,\
-        self.s1, self.s2, self.labels, self.values,\
+        self.s1, self.s2, self.goals, self.labels, self.values,\
         self.text_vocab, self.object_vocab_size = load_vin_instructions(self.datadir, self.mode, self.annotation,
-                                                                  self.num_train, self.num_test, train=self.train, scale=75)
+                                                                  self.num_train, self.num_test, train=self.train, scale=self.scale)
+        print self.goals[0], len(self.goals)
         return
 
     def __getitem__(self, index):
@@ -86,7 +88,7 @@ class SprInstructions(data.Dataset):
         s1 = int(self.s1[index])
         s2 = int(self.s2[index])
         label = int(self.labels[index])
-
+        goal = self.goals[index]
 
 
         # Apply transform if we have one
@@ -95,7 +97,7 @@ class SprInstructions(data.Dataset):
         # Apply target transform if we have one
         if self.target_transform is not None:
             label = self.target_transform(label)
-        return layout, object_map, inst, s1, s2, label
+        return layout, object_map, inst, s1, s2, goal, label
         
 
     def __len__(self):
