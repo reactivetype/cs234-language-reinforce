@@ -2,7 +2,7 @@ import sys, os, math, pickle, numpy as np, torch, pdb
 from tqdm import tqdm
 import environment.library as library
 from IPython import embed
-np.random.seed(0)
+
 
 HUMAN_TEST_MAPS = {
     'local': [18,20,21,22,23,24,25,26,27,49,53,20,30,40,50,35,45,46,47],
@@ -69,7 +69,7 @@ def vin_format_instructions(layouts, objects, instructions, s1, s2, label):
         data.append(t)
     return data
 
-def get_vin_data(values, goals, scaling_factor=1):
+def get_vin_data(values, goals, scaling_factor=1, reduced=True):
     startpos_s1 = []
     startpos_s2 = []
     optimal_actions = []
@@ -80,7 +80,10 @@ def get_vin_data(values, goals, scaling_factor=1):
             while overlap:
                 s1, s2 = np.random.randint(0, 9, 2)
                 overlap = validate_startpos(s1, s2, g)
-            a = get_optimal_action(s1, s2, val)
+            if reduced:
+                a = get_optimal_action_four(s1, s2, val)
+            else:
+                a = get_optimal_action(s1, s2, val)
             startpos_s1.append(s1)
             startpos_s2.append(s2)
             optimal_actions.append(a)
@@ -111,13 +114,42 @@ def get_optimal_action(s1, s2, values, grid_size=10):
     # print cell_values
     return np.argmax(cell_values)
 
+
 def reorder(v):
     """
-    0 3 5
-    1   6
-    2 4 7
+    Incoming:    
+    0 1 2
+    3   4
+    5 6 7
+
+    Returned:
+    5 3 4
+    6   3
+    7 0 1
     """
     return [v[6], v[7], v[4], v[2], v[1], v[0], v[3], v[5]]
+
+def get_optimal_action_four(s1, s2, values, grid_size=10):
+    """
+    s2 is the inner dimension of the 2D array
+             (s1-1, s2) 
+    (s1,s2-1)           (s1, s2+1)
+             (s1+1, s2)
+    """
+    cell_values = []
+    overflow = False
+    #Look at teh comments for the order
+    cells = [(s1+1, s2),
+             (s1,   s2+1),
+             (s1-1, s2),
+             (s1,   s2-1)]
+
+    for i,j in cells:
+        if overflow_check(i, j, grid_size):
+            cell_values.append(np.finfo(float).min)
+        else:
+            cell_values.append(values[i][j])
+    return np.argmax(cell_values)
 
 def overflow_check(i, j, grid_size=10):
     if i < 0 or j < 0:

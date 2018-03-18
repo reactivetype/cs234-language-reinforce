@@ -6,7 +6,7 @@ import os
 import time
 import argparse
 import numpy as np
-
+np.random.seed(0)
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -48,7 +48,7 @@ def train(net, trainloader, config, criterion, optimizer, use_GPU):
             # Zero the parameter gradients
             optimizer.zero_grad()
             # Forward pass
-            outputs, predictions = net(layouts, object_maps, inst, S1, S2, config)
+            outputs, predictions, v, r, heatmap = net(layouts, object_maps, inst, S1, S2, config)
             # Loss
             loss = criterion(outputs, labels)
             # Backward pass
@@ -148,26 +148,30 @@ if __name__ == '__main__':
                         type=int, 
                         default=25, 
                         help='Data point replication')
-
     parser.add_argument('--name_header', 
                         type=str, 
                         default="spr_vin", 
                         help='Data point replication')
+    parser.add_argument('--map_type', 
+                        type=str, 
+                        default="local", 
+                        help='Global or local maps')
     config = parser.parse_args()
     # Get path to save trained model
 
     if not os.path.isdir(config.save_dir):
         os.mkdir(config.save_dir)
-    save_name = "{}_{}epcs_{}its_{}datascale.pth".format(config.name_header, config.epochs,
+    save_name = "{}_{}_{}epcs_{}its_{}datascale.pth".format(config.name_header, config.map_type, config.epochs,
                                                          config.k, config.data_scale)
     save_path = os.path.join(config.save_dir, save_name)
     print "Model will be saved as {}".format(save_path)
 
     #Load Spatial reasoning dataset
-    trainset = SprInstructions(config.datadir, mode='local',
+    map_type=config.map_type
+    trainset = SprInstructions(config.datadir, mode=map_type,
                                annotation='human', train=True,
                                scale=config.data_scale)
-    testset = SprInstructions(config.datadir, mode='local',
+    testset = SprInstructions(config.datadir, mode=map_type,
                               annotation='human', train=False, scale=1)
     
     # Create Dataloader

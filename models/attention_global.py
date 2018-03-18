@@ -8,18 +8,20 @@ import custom
 
 class AttentionGlobal(nn.Module):
 # args.lstm_out, args.goal_hid, args.rank, args.obj_embed
-    def __init__(self, text_model, args, map_dim = 10):
+    def __init__(self, text_model, attention_kernel, 
+                 attention_in_dim, attention_out_dim,
+                 global_coeffs=3, map_dim = 10):
         super(AttentionGlobal, self).__init__()
         
-        assert args.attention_kernel % 2 == 1
+        assert attention_kernel % 2 == 1
 
         self.text_model = text_model
         # self.object_model = object_model
 
-        self.embed_dim = args.attention_in_dim
-        self.kernel_out_dim = args.attention_out_dim
-        self.kernel_size = args.attention_kernel 
-        self.global_coeffs = args.global_coeffs
+        self.embed_dim = attention_in_dim
+        self.kernel_out_dim = attention_out_dim
+        self.kernel_size = attention_kernel 
+        self.global_coeffs = global_coeffs
 
         padding = int(math.ceil(self.kernel_size/2.)) - 1
         self.conv_custom = custom.ConvKernel(self.embed_dim, self.kernel_out_dim, self.kernel_size, bias=False, padding=padding)

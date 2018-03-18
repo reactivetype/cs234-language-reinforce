@@ -33,7 +33,7 @@ class SprVin(nn.Module):
                            stride=1, padding=1,
                            bias=False)
         self.fc = nn.Linear(in_features=config.l_q, 
-                            out_features=8,
+                            out_features=4,
                             bias=False)
         self.w = Parameter(torch.zeros(config.l_q,1,3,3), requires_grad=True)
         self.sm = nn.Softmax()
@@ -69,7 +69,7 @@ class SprVin(nn.Module):
         q_out = q_out.gather(2, slice_s2).squeeze(2)
 
         logits = self.fc(q_out)
-        return logits, self.sm(logits)
+        return logits, self.sm(logits), v, r, heatmap
 
 if __name__ == '__main__':
     #create object embedding model
