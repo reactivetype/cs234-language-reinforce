@@ -11,12 +11,13 @@ from lookup_model import LookupModel
 from text_model import TextModel
 from attention_heatmap import AttentionHeatmap
 
-class SprVinGlobal(nn.Module): 
-    def __init__(self, config, heatmap_model, object_model):
-        super(SprVinGlobal, self).__init__()
+class SprVinReward(nn.Module): 
+    def __init__(self, config, heatmap_model, object_model, actions=4):
+        super(SprVinReward, self).__init__()
         self.config = config
         self.heatmap_model = heatmap_model
         self.object_model = object_model
+        self.actions = actions
         self.h0 = nn.Conv2d(in_channels=config.l_i, 
                            out_channels=config.l_h/4, 
                            kernel_size=(3, 3), 
@@ -43,7 +44,7 @@ class SprVinGlobal(nn.Module):
                            stride=1, padding=1,
                            bias=False)
         self.fc = nn.Linear(in_features=config.l_q, 
-                            out_features=4,
+                            out_features=self.actions,
                             bias=False)
         self.w = Parameter(torch.zeros(config.l_q,1,3,3), requires_grad=True)
         self.sm = nn.Softmax()

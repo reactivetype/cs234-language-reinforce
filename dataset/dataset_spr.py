@@ -57,7 +57,8 @@ class SprTerminal(data.Dataset):
 class SprInstructions(data.Dataset):
     def __init__(self, datadir, mode='local',
                  annotation='human', train=True, scale=50,
-                 transform=None, target_transform=None):
+                 transform=None, target_transform=None,
+                 actions=4, with_rewards=True):
         assert os.path.isdir(datadir) # Must be .npz format
         self.transform = transform
         self.target_transform = target_transform
@@ -68,23 +69,28 @@ class SprInstructions(data.Dataset):
         self.annotation = annotation
         self.datadir = datadir
         self.scale = scale
+        self.actions = actions
+        self.with_rewards = with_rewards
         self.load_data()
         self.text_vocab_size   = len(self.text_vocab) + 1
         data_type = 'train' if self.train else 'test'
         print "Loaded %s %s examples" %(len(self.layouts), data_type)
 
     def load_data(self):
-        self.layouts, self.objects, self.instructions,\
+        self.layouts, self.objects, self.inst_indices,\
         self.s1, self.s2, self.goals, self.labels, self.values,\
-        self.text_vocab, self.object_vocab_size = load_vin_instructions(self.datadir, self.mode, self.annotation,
-                                                                  self.num_train, self.num_test, train=self.train, scale=self.scale)
+        self.text_vocab, self.object_vocab_size,\
+        self.rewards, self.instructions = load_vin_instructions(self.datadir, self.mode, self.annotation,
+                                                                  self.num_train, self.num_test, train=self.train,
+                                                                  scale=self.scale, actions=self.actions,
+                                                                  with_rewards=self.with_rewards)
         print self.goals[0], len(self.goals)
         return
 
     def __getitem__(self, index):
         layout = np.array(self.layouts[index], dtype=np.float32)
         object_map = np.array(self.objects[index], dtype=int)
-        inst = np.array(self.instructions[index], dtype=int)
+        inst = np.array(self.inst_indices[index], dtype=int)
         s1 = int(self.s1[index])
         s2 = int(self.s2[index])
         label = int(self.labels[index])

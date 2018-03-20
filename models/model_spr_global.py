@@ -12,7 +12,7 @@ from text_model import TextModel
 from attention_heatmap import AttentionHeatmap
 
 class SprVinGlobal(nn.Module): 
-    def __init__(self, config, heatmap_model, object_model):
+    def __init__(self, config, heatmap_model, object_model, actions=4):
         super(SprVinGlobal, self).__init__()
         self.config = config
         self.heatmap_model = heatmap_model
@@ -33,7 +33,7 @@ class SprVinGlobal(nn.Module):
                            stride=1, padding=1,
                            bias=False)
         self.fc = nn.Linear(in_features=config.l_q, 
-                            out_features=4,
+                            out_features=actions,
                             bias=False)
         self.w = Parameter(torch.zeros(config.l_q,1,3,3), requires_grad=True)
         self.sm = nn.Softmax()

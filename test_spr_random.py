@@ -12,7 +12,7 @@ from dataset.dataset_spr import SprInstructions
 def test_manhattan(testloader, config, report_path=None):
     total, correct = 0.0, 0.0
     dist = []
-    stop = []
+    steps = []
     progress = tqdm(total = len(testloader))
     for i, data in enumerate(testloader):
         layouts, object_maps, inst, S1, S2, goals, labels = data
@@ -30,7 +30,7 @@ def test_manhattan(testloader, config, report_path=None):
         # inst = Variable(inst)
         d, st = simulate_rollout(layouts, object_maps, inst, S1, S2, goals, labels, config)
         dist.append(d)
-        stop.append(st)
+        steps.append(st)
         progress.update(1)
     # print('Test Accuracy: {:.2f}%'.format(100*(correct/total)))
     # print "Average Manhattan distance: %s" %(np.mean(dist))
@@ -39,8 +39,9 @@ def test_manhattan(testloader, config, report_path=None):
     print dist_report
 
     print "Stopping step:"
-    steps_report = get_stats(stop)
+    steps_report = get_stats(steps)
     print steps_report
+    get_success_rate(steps, 25)
 
     if report_path:
         with open(report_path, 'w') as rid:
@@ -59,21 +60,30 @@ def simulate_rollout(layouts, object_maps, inst, S1, S2, goals, labels, config, 
         # _, predicted = torch.max(outputs, dim=1, keepdim=True)
         # predicted = predicted.data
         # action = int(predicted.view(-1)[0])
-        # action = np.random.randint(0, 4)
-        action = np.random.randint(0, 8)
+        action = np.random.randint(0, 4)
+        # action = np.random.randint(0, 8)
         # embed()
         # exit()
-        s1_new, s2_new = get_start_postion(action, int(S1), int(S2), reduced=False)
+        s1_new, s2_new = get_start_postion(action, int(S1), int(S2), reduced=True)
         # S1 = Variable(torch.from_numpy(np.array([s1_new]))).cuda()
         # S2 = Variable(torch.from_numpy(np.array([s2_new]))).cuda()
         S1 = s1_new
         S2 = s2_new
-        reached = goal_reached(goals.view(-1), int(S1), int(S2))
         step += 1
+        reached = goal_reached(goals.view(-1), int(S1), int(S2))
 
     #calculate manhattan distance
     dist = calc_manhattan(goals.view(-1), s1_new, s2_new)
     return dist, step
+
+def get_success_rate(actions, max_steps=25):
+    a = np.array(actions)
+    print a
+    cnt = len(actions)
+    print "Finding success rate for {} trials".format(cnt)
+    s = np.count_nonzero(a<max_steps-1)
+    print "Sucess rate {}".format(s*100.0/cnt)
+    return
 
 def get_start_postion(action, s1, s2, grid_size=10, reduced=True):
     if reduced:

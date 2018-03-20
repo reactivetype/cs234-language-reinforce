@@ -13,9 +13,21 @@ np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
 def load_vin(datadir, mode, data, num_train, num_test, scale=50, train=True, load_instructions=False):
     if train:
-        data, tmp_data = load(mode, data, num_train, num_test, datadir)
+        if mode == 'joint':
+            data_l, tmp_data = load('local', data, num_train, num_test, datadir)
+            data_g, tmp_data = load('global', data, num_train, num_test, datadir)
+            print "Joining local and global datasets"
+            data = join_dataset(data_l, data_g)
+        else:
+            data, tmp_data = load(mode, data, num_train, num_test, datadir)
     else:
-        tmp_data, data = load(mode, data, num_train, num_test, datadir)
+        if mode == 'joint':
+            tmp_data, data_l = load('local', data, num_train, num_test, datadir)
+            tmp_data, data_g = load('global', data, num_train, num_test, datadir)
+            print "Joining local and global datasets"
+            data = join_dataset(data_l, data_g)
+        else:
+            tmp_data, data = load(mode, data, num_train, num_test, datadir)
 
     layouts, objects, rewards, terminal, instructions, values, goals = data
     layout_vocab_size, object_vocab_size, text_vocab_size, text_vocab = get_statistics(data, tmp_data)
@@ -31,26 +43,50 @@ def load_vin(datadir, mode, data, num_train, num_test, scale=50, train=True, loa
     # print len(vin_data)
     return vin_data, values, text_vocab
 
-def load_vin_instructions(datadir, mode, data, num_train, num_test, scale=50, train=True):
+def load_vin_instructions(datadir, mode, data, num_train,
+                          num_test, scale=50, train=True,
+                          actions=4, with_rewards=False):
     if train:
-        data, tmp_data = load(mode, data, num_train, num_test, datadir)
+        if mode == 'joint':
+            data_l, tmp_data = load('local', data, num_train, num_test, datadir)
+            data_g, tmp_data = load('global', data, num_train, num_test, datadir)
+            print "Joining local and global datasets"
+            data = join_dataset(data_l, data_g)
+        else:
+            data, tmp_data = load(mode, data, num_train, num_test, datadir)
     else:
-        tmp_data, data = load(mode, data, num_train, num_test, datadir)
-
+        if mode == 'joint':
+            tmp_data, data_l = load('local', data, num_train, num_test, datadir)
+            tmp_data, data_g = load('global', data, num_train, num_test, datadir)
+            print "Joining local and global datasets"
+            data = join_dataset(data_l, data_g)
+        else:
+            tmp_data, data = load(mode, data, num_train, num_test, datadir)
+            
+    if actions == 4:
+        reduced = True
+        print "Loading 4-actions dataset"
+    else:
+        reduced = False
+        print "Loading 8-actions dataset"
     layouts, objects, rewards, terminal, instructions, values, goals = data
     layout_vocab_size, object_vocab_size, text_vocab_size, text_vocab = get_statistics(data, tmp_data)
-    s1, s2, label = get_vin_data(values, goals, scale)
+    s1, s2, label = get_vin_data(values, goals, scale, reduced)
     indices = instructions_to_indices(instructions, text_vocab)
     layouts = np.repeat(layouts, scale, axis=0)
     objects = np.repeat(objects, scale, axis=0)
     indices = np.repeat(indices, scale, axis=0)
     goals = np.repeat(goals, scale, axis=0)
+    rewards = np.repeat(rewards, scale, axis=0)
     # if load_instructions:
     #     vin_data = vin_format_instructions(layouts, objects, instructions, s1, s2, label)
     # else:
     #     vin_data = vin_format_terminal(layouts, objects, 10*terminal, s1, s2, label)
     # print len(vin_data)
-    return layouts, objects, indices, s1, s2, goals, label, values, text_vocab, object_vocab_size
+    if with_rewards:
+        return layouts, objects, indices, s1, s2, goals, label, values, text_vocab, object_vocab_size, rewards, instructions
+    else:
+        return layouts, objects, indices, s1, s2, goals, label, values, text_vocab, object_vocab_size
 
 def vin_format_terminal(layouts, objects, terminal, s1, s2, label, scale=1):
     data = []
@@ -88,6 +124,22 @@ def get_vin_data(values, goals, scaling_factor=1, reduced=True):
             startpos_s2.append(s2)
             optimal_actions.append(a)
     return startpos_s1, startpos_s2, optimal_actions
+
+def join_dataset(d1, d2):
+    """
+    Joins two dataset
+    """
+    #Values and goals are list rest and numpy array
+    #layouts, objects, rewards, terminal, instructions, values, goals = d1
+    not_arrays = [4, 6]
+    ret_list = []
+    for i in range(len(d1)):
+        if i not in not_arrays:
+            print d1[i].shape
+            ret_list.append(np.concatenate((d1[i], d2[i])))
+        else:
+            ret_list.append(d1[i] + d2[i])
+    return ret_list
 
 def validate_startpos(s1, s2, goal, grid_size=10):
     if s1 == goal[0] and s2 == goal[1]:

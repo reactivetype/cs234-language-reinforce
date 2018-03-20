@@ -1,6 +1,5 @@
 """
-Scripty to train an network using the VIN approach.
-Note that this script takes in the terminal position as one of the inputs.
+Script to train an network using the VIN approach.
 """
 import os
 import time
@@ -17,12 +16,13 @@ import pickle
 import matplotlib.pyplot as plt
 from dataset.dataset_spr import SprInstructions
 from vin_utility.utils import *
-# from models.model_spr_global import SprVinGlobal
-from models.model_spr_global_reward import SprVinGlobal
+from models.model_spr_global import SprVinGlobal
+from models.model_spr_global_reward import SprVinReward
 from models.lookup_model import LookupModel
 from models.text_model import TextModel
 from models.attention_global import AttentionGlobal
-from test_spr import test_manhattan
+# from test_spr import test_manhattan
+from test_spr_global import test_manhattan
 
 def train(net, trainloader, config, criterion, optimizer, use_GPU):
     print_header()
@@ -32,7 +32,6 @@ def train(net, trainloader, config, criterion, optimizer, use_GPU):
         for i, data in enumerate(trainloader): # Loop over batches of data
             # Get input batch
             layouts, object_maps, inst, S1, S2, goals, labels = data
-
             if layouts.size()[0] != config.batch_size:
                 continue # Drop those data, if not enough for a batch
             # Send Tensors to GPU if available
@@ -119,7 +118,7 @@ if __name__ == '__main__':
                         help='Learning rate, [0.01, 0.005, 0.002, 0.001]')
     parser.add_argument('--epochs', 
                         type=int, 
-                        default=25, 
+                        default=30, 
                         help='Number of epochs to train')
     parser.add_argument('--k', 
                         type=int, 
@@ -147,7 +146,7 @@ if __name__ == '__main__':
                         help='Directory to save models')
     parser.add_argument('--data_scale', 
                         type=int, 
-                        default=25, 
+                        default=50, 
                         help='Data point replication')
     parser.add_argument('--name_header', 
                         type=str, 
@@ -157,13 +156,21 @@ if __name__ == '__main__':
                         type=str, 
                         default="local", 
                         help='Global or local maps')
+    parser.add_argument('--actions', 
+                        type=int, 
+                        default=4, 
+                        help='no. of actions')
+    parser.add_argument('--reward_model', 
+                        type=str, 
+                        default='simple', 
+                        help='options: simple, 3layer')
     config = parser.parse_args()
     # Get path to save trained model
 
     if not os.path.isdir(config.save_dir):
         os.mkdir(config.save_dir)
-    save_name = "FullModel_{}_{}_{}epcs_{}its_{}datascale.pth".format(config.name_header, config.map_type, config.epochs,
-                                                         config.k, config.data_scale)
+    save_name = "FullModel_{}_{}-maps_{}-epcs_{}-its_{}-datascale_{}-reward.pth".format(config.name_header, config.map_type, config.epochs,
+                                                                                   config.k, config.data_scale, config.reward_model)
     save_path = os.path.join(config.save_dir, save_name)
     print "Model will be saved as {}".format(save_path)
 
@@ -171,9 +178,10 @@ if __name__ == '__main__':
     map_type=config.map_type
     trainset = SprInstructions(config.datadir, mode=map_type,
                                annotation='human', train=True,
-                               scale=config.data_scale)
+                               scale=config.data_scale, actions=config.actions)
     testset = SprInstructions(config.datadir, mode=map_type,
-                              annotation='human', train=False, scale=1)
+                              annotation='human', train=False,
+                              scale=1, actions=config.actions)
     
     # Create Dataloader
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=config.batch_size, shuffle=True, num_workers=4)
@@ -200,11 +208,19 @@ if __name__ == '__main__':
                                     attn_in,
                                     attn_out,
                                     global_coeff)
-    spr_model = SprVinGlobal(config, heatmap_model, object_model)
+    if config.reward_model == 'simple':
+        print "Using simple 1layer reward model"
+        spr_model = SprVinGlobal(config, heatmap_model, object_model, actions=config.actions)
+    else:
+        print "Using 3layer reward model"
+        spr_model = SprVinReward(config, heatmap_model, object_model, actions=config.actions)
 
-
-    
-    
+    print spr_model
+    model_info = spr_model.__str__()
+    model_summary = save_path.replace('.pth', '.modeltxt')
+    with open(model_summary, 'w') as mid:
+        for i in model_info.split('\n'):
+            mid.write(i+'\n')
 
     # Use GPU if available
     if use_GPU:
@@ -217,7 +233,6 @@ if __name__ == '__main__':
     transform = None
     
     # Train the model
-    # embed()
     train(spr_model, trainloader, config, criterion, optimizer, use_GPU)
     
     # Test accuracy
@@ -225,16 +240,15 @@ if __name__ == '__main__':
     report_path = save_path.replace('.pth', '_test.txt')
     spr_model.eval()
     spr_model.positions_batch = spr_model.positions.repeat(1,1,1,1)
-    test_manhattan(spr_model, testloader, config, report_path)
+    test_manhattan(spr_model, testloader, config, report_path, testset)
     # Save the trained model
 
     trainset_analysis = SprInstructions(config.datadir, mode=map_type,
                            annotation='human', train=True,
-                           scale=1)
-    trainset_analysis_loader = torch.utils.data.DataLoader(trainset_analysis, batch_size=1, shuffle=False, num_workers=4)
+                           scale=1, actions=config.actions)
+    trainset_analysis_loader = torch.utils.data.DataLoader(trainset_analysis, batch_size=1, shuffle=False, num_workers=0)
     report_path = save_path.replace('.pth', '_train.txt')
-    # test_manhattan(spr_model, trainset_analysis_loader, config, report_path)
+    test_manhattan(spr_model, trainset_analysis_loader, config, report_path, trainset_analysis)
     torch.save(spr_model, save_path)
-    # embed()
     
     

@@ -6,14 +6,12 @@ import numpy as np
 import torch
 from torch.autograd import Variable
 from IPython import embed
-# from dataset.dataset import *
-# from utility.utils import *
-# from model import *
 from tqdm import tqdm
+import pickle
 
 from dataset.dataset_spr import SprInstructions
 
-def test_manhattan(net, testloader, config, report_path=None):
+def test_manhattan(net, testloader, config, report_path=None, testset=None):
     # testset = SprInstructions(config.datadir, mode='local', annotation='human', train=False, scale=1)
     # testloader = torch.utils.data.DataLoader(testset, batch_size=1, shuffle=False, num_workers=0)
     use_GPU = torch.cuda.is_available()
@@ -24,8 +22,14 @@ def test_manhattan(net, testloader, config, report_path=None):
     dist = []
     stop = []
     progress = tqdm(total = len(testloader))
+    info_dict = initialize_recording_struct()
     for i, data in enumerate(testloader):
         layouts, object_maps, inst, S1, S2, goals, labels = data
+        inst_text = testset.instructions[i]
+        reward = testset.rewards[i]
+        val = testset.values[i]
+        info_dict = record_truth(info_dict, layouts, object_maps, inst_text, goals, reward, val)
+
         # Send Tensors to GPU if available
         if use_GPU:
             layouts = layouts.cuda()
@@ -50,10 +54,13 @@ def test_manhattan(net, testloader, config, report_path=None):
         # total += labels.size()[0]
         # embed()
         # break
-        d, st = simulate_rollout(net, layouts, object_maps, inst, S1, S2, goals, labels, config)
+        d, st, info_dict = simulate_rollout(net, layouts, object_maps, inst,
+                                            S1, S2, goals, labels, config, info_dict)
         dist.append(d)
         stop.append(st)
         progress.update(1)
+        # if i > 3:
+        #     break
     # print('Test Accuracy: {:.2f}%'.format(100*(correct/total)))
     # print "Average Manhattan distance: %s" %(np.mean(dist))
     print "Manhattan Distance:"
@@ -70,12 +77,16 @@ def test_manhattan(net, testloader, config, report_path=None):
             rid.write(dist_report+'\n')
             rid.write("Stopping step:\n")
             rid.write(steps_report+'\n')
+        pkl_path = report_path.replace('.txt', '.pkl')
+        with open(pkl_path, 'wb') as pid:
+            pickle.dump(info_dict, pid)
     return
 
 
-def simulate_rollout(net, layouts, object_maps, inst, S1, S2, goals, labels, config, max_steps=75):
+def simulate_rollout(net, layouts, object_maps, inst, S1, S2, goals, labels, config, info_dict, max_steps=75):
     reached = False
     step = 0
+    info_dict = initialize_rollout_record(info_dict, S1, S2)
     while (not reached) and (step < max_steps):
         outputs, predictions, v, r, heatmap = net(layouts, object_maps, inst, S1, S2, config)
         _, predicted = torch.max(outputs, dim=1, keepdim=True)
@@ -84,6 +95,11 @@ def simulate_rollout(net, layouts, object_maps, inst, S1, S2, goals, labels, con
         # embed()
         # exit()
         s1_new, s2_new = get_start_postion(action, int(S1), int(S2))
+        next_state = (s1_new, s2_new)
+        if step == 0:
+            info_dict = record_prediction(info_dict, action, next_state, v, r)
+        else:
+            info_dict = record_action(info_dict, action, next_state)
         S1 = Variable(torch.from_numpy(np.array([s1_new]))).cuda()
         S2 = Variable(torch.from_numpy(np.array([s2_new]))).cuda()
         reached = goal_reached(goals.view(-1), int(S1), int(S2))
@@ -91,7 +107,8 @@ def simulate_rollout(net, layouts, object_maps, inst, S1, S2, goals, labels, con
 
     #calculate manhattan distance
     dist = calc_manhattan(goals.view(-1), s1_new, s2_new)
-    return dist, step
+    info_dict['prediction']['distance'].append(dist)
+    return dist, step, info_dict
 
 def get_start_postion(action, s1, s2, grid_size=10, reduced=True):
     if reduced:
@@ -214,6 +231,59 @@ def get_stats(arr):
     std = np.std(arr)
     stats = "Mean:%s, Std:%s, Median:%s, Min-Max: %s,%s" %(m, std, md, mn, mx)
     return stats
+
+def initialize_recording_struct():
+    info_dict = {}
+    #Ground Truth info
+    info_dict['truth'] = {}
+    info_dict['truth']['layout'] = []
+    info_dict['truth']['object'] = []
+    info_dict['truth']['instruction'] = []
+    info_dict['truth']['reward'] = []
+    info_dict['truth']['value'] = []
+    info_dict['truth']['goal'] = []
+
+    info_dict['prediction'] = {}
+    info_dict['prediction']['start_pos'] = []
+    info_dict['prediction']['action'] = []
+    info_dict['prediction']['next_state'] = []
+    info_dict['prediction']['rhat'] = []
+    info_dict['prediction']['vhat'] = []
+    info_dict['prediction']['distance'] = []
+    return info_dict
+
+def record_truth(info_dict, layout, objects, instruction, goal, reward, value):
+    """
+    Records ground truth
+    """
+    info_dict['truth']['layout'].append(layout)
+    info_dict['truth']['object'].append(objects)
+    info_dict['truth']['instruction'].append(instruction)
+    info_dict['truth']['reward'].append(reward)
+    info_dict['truth']['value'].append(value)
+    info_dict['truth']['goal'].append(goal)
+    return info_dict
+
+def initialize_rollout_record(info_dict, S1, S2):
+    start_pos = (int(S2), int(S1))
+    info_dict['prediction']['start_pos'].append(start_pos)
+    info_dict['prediction']['action'].append([])
+    info_dict['prediction']['next_state'].append([])
+    # info_dict['prediction']['rhat'].append([])
+    # info_dict['prediction']['vhat'].append([])
+    return info_dict
+
+def record_prediction(info_dict, action, next_state, vhat, rhat):
+    info_dict['prediction']['action'][-1].append(action)
+    info_dict['prediction']['next_state'][-1].append(next_state)
+    info_dict['prediction']['rhat'].append(rhat.cpu().squeeze().data.numpy())
+    info_dict['prediction']['vhat'].append(vhat.cpu().squeeze().data.numpy())
+    return info_dict
+
+def record_action(info_dict, action, next_state):
+    info_dict['prediction']['action'][-1].append(action)
+    info_dict['prediction']['next_state'][-1].append(next_state)
+    return info_dict
 
 if __name__ == '__main__':
     # Parsing training parameters
